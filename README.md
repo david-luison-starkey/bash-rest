@@ -33,6 +33,8 @@ Arguments passed to annotated functions are path variables in order of appearanc
 ```bash
 #!/usr/bin/env bash
 
+# controller.bash
+
 source "./request_mapping.bash"
 
 @get_mapping "/api/v1/{userId}/dashboard/{profileId}"
@@ -51,15 +53,9 @@ EOF
 
 ```
 
-2. Source script with mapped functions into `bash-rest.bash` (no need to manually call anything):
+2. Start the webserver `bash bash-rest.bash controller.bash`. Arguments are paths to `sh` or `bash` files with request mapping annotated functions. 
 
-```bash
-
-source "./controller.bash"
-
-```
-
-3. Start the webserver `bash bash-rest.bash` and sent a GET request to an endpoint:
+3. Send request to the endpoint defined above:
 
 ```bash
 

@@ -2,9 +2,6 @@
 
 # shellcheck disable=2034,2162,2155,2207
 
-# source scripts with functions annotated with request_mapping annotations here
-# source "..."
-
 declare -gx BASH_REST_PROJECT_BASE_DIRECTORY="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 declare -i BASH_REST_PORT=3000
 declare BASH_REST_RESPONSE_FIFO="bash_rest_response"
@@ -289,4 +286,20 @@ bash_rest_main() {
 	done
 }
 
+bash_rest_parse_script_arguments() {
+	local arguments_array=("${@}")
+	echo
+	for argument in "${arguments_array[@]}"; do
+		if [[ -f "${argument}" ]]; then
+			bash_rest_print_log "INFO" "Sourcing ${argument}"
+			# shellcheck disable=1090
+			source "${argument}"
+		else
+			bash_rest_print_log "ERROR" "Unable to source ${argument}. File not found"
+		fi
+	done
+}
+
+# Init script
+bash_rest_parse_script_arguments "${@}"
 bash_rest_main
