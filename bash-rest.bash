@@ -6,8 +6,6 @@
 
 # shellcheck disable=2034,2162,2155,2207
 
-source "./modules/bash-annotations/src/bash-annotations.bash"
-
 declare -gx BASH_REST_PROJECT_BASE_DIRECTORY="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 declare -i BASH_REST_PORT=3000
 declare BASH_REST_RESPONSE_FIFO="bash_rest_response"
