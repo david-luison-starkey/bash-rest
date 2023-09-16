@@ -202,6 +202,10 @@ bash_rest_handle_request() {
 }
 
 fifo_setup() {
+	if [[ ! -d "${BASH_REST_RESPONSE_FIFO_PATH%/*}" ]]; then
+		mkdir "${BASH_REST_RESPONSE_FIFO_PATH%/*}"
+	fi
+
 	if [[ ! -p "${BASH_REST_RESPONSE_FIFO_PATH}" ]]; then
 		mkfifo "${BASH_REST_RESPONSE_FIFO_PATH}"
 	fi
@@ -210,6 +214,10 @@ fifo_setup() {
 fifo_cleanup() {
 	if [[ -p "${BASH_REST_RESPONSE_FIFO_PATH}" ]]; then
 		rm -f "${BASH_REST_RESPONSE_FIFO_PATH}"
+	fi
+
+	if [[ -d "${BASH_REST_RESPONSE_FIFO_PATH%/*}" ]]; then
+		rm -d "${BASH_REST_RESPONSE_FIFO_PATH%/*}"
 	fi
 }
 
