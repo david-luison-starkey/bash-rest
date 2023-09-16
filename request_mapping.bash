@@ -2,7 +2,7 @@
 
 # shellcheck disable=2034,2154
 
-source "./modules/bash-annotations/src/bash-annotations.bash"
+source "${BASH_REST_PROJECT_BASE_DIRECTORY}/modules/bash-annotations/src/bash-annotations.bash"
 import interfaces/inject.bash
 
 @inject PRE
