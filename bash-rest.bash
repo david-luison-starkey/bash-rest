@@ -22,6 +22,30 @@ bash_rest_print_log() {
 	echo "${current_timestamp}    ${log_level} $$    ---    ${log_message}"
 }
 
+get_annotation_endpoint() {
+	local annotation="${1}"
+	local endpoint
+
+	endpoint=$(declare -f "${annotation}" | grep -oP "local bash_rest_endpoint=[\"\'a-zA-Z0-9{}:./_-]+$")
+	# strip variable name, = and ""
+	endpoint="${endpoint##*=}"
+	endpoint="${endpoint%*\"}"
+	endpoint="${endpoint#\"*}"
+
+	echo "${endpoint}"
+}
+
+get_annotation_target_function() {
+	local annotation="${1}"
+	declare -f "${annotation}" | grep -oP "(?<=local bash_rest_target_annotation=)(?<=\")?(?<=\')?[a-zA-Z:./_-]+"
+}
+
+get_annotation_source_file() {
+	local annotation="${1}"
+	declare -f "${annotation}" | grep -oP "(?<=local bash_rest_function_source_file=)(?<=\")?(?<=\')?[a-zA-Z:./_-]+"
+
+}
+
 get_request_path_variables() {
 	local base_endpoint="${1}"
 	local incoming_request_endpoint="${2}"
@@ -121,13 +145,9 @@ parse_controller_annotations() {
 
 	for annotation in "${controller_annotations_array[@]}"; do
 		# get endpoint mapping
-		endpoint=$(declare -f "${annotation}" | grep -oP "local bash_rest_endpoint=[\"\'a-zA-Z0-9{}:./_-]+$")
-		# strip variable name, = and ""
-		endpoint="${endpoint##*=}"
-		endpoint="${endpoint%*\"}"
-		endpoint="${endpoint#\"*}"
+		endpoint=$(get_annotation_endpoint "${annotation}")
 		# get function associated with endpoint
-		target_function="$(declare -f "${annotation}" | grep -oP "(?<=local bash_rest_target_annotation=)(?<=\")?(?<=\')?[a-zA-Z:./_-]+")"
+		target_function=$(get_annotation_target_function "${annotation}")
 		http_method="${annotation%%_*}"
 		http_method="${http_method#*@}"
 		populate_bash_rest_mapped_endpoints_array "${endpoint}"
@@ -240,16 +260,13 @@ bash_rest_print_located_annotations() {
 
 	for annotation in "${http_method_mapping_annotations_array[@]}"; do
 		# get endpoint mapping
-		endpoint=$(declare -f "${annotation}" | grep -oP "local bash_rest_endpoint=[\"\'a-zA-Z0-9{}:./_-]+$")
-		# strip variable name, = and ""
-		endpoint="${endpoint##*=}"
-		endpoint="${endpoint%*\"}"
-		endpoint="${endpoint#\"*}"
+		endpoint=$(get_annotation_endpoint "${annotation}")
 		endpoints+=("${endpoint}")
 		# get function associated with endpoint
-		target_function="$(declare -f "${annotation}" | grep -oP "(?<=local bash_rest_target_annotation=)(?<=\")?(?<=\')?[a-zA-Z:./_-]+")"
+		target_function=$(get_annotation_target_function "${annotation}")
+		annotation_source_file=$(get_annotation_source_file "${annotation}")
 
-		bash_rest_print_log "INFO" "Mapping ${annotation}: ${endpoint} to ${target_function}()"
+		bash_rest_print_log "INFO" "Mapping ${annotation_source_file##*/}::${annotation}: ${endpoint} to ${target_function}()"
 	done
 
 	mapfile -t duplicate_endpoint_declarations < <(printf '%s\n' "${endpoints[@]}" | sort | uniq -d)
