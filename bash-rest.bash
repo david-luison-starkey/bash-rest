@@ -186,10 +186,10 @@ build_endpoint_handler_function() {
 
 	        if [[ -z \${bash_rest_404_response} ]]; then
 						bash_rest_print_log "INFO" "HTTP call to \${bash_rest_incoming_request_http_method_and_endpoint}"
-	          echo -e \$bash_rest_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
+	          echo -e "\$bash_rest_response" >"${BASH_REST_RESPONSE_FIFO_PATH}"
 	        else
 	        	bash_rest_print_log "ERROR" "Endpoint mapping does not exist for \${bash_rest_incoming_request_http_method_and_endpoint}"
-	          echo -e \$bash_rest_404_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
+	          echo -e "\$bash_rest_404_response" >"${BASH_REST_RESPONSE_FIFO_PATH}"
 	        fi
 				}
 DECLARE_BASH_REST_ENDPOINT_HANDLER_FUNCTION
