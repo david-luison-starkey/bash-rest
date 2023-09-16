@@ -160,7 +160,7 @@ build_endpoint_handler_function() {
 	local controller_switch_start="case \"\${bash_rest_endpoint_match}\" in "
 	local controller_switch_statement=""
 	# shellcheck disable=2016
-	local controller_switch_end='*) bash_rest_response="HTTP/1.1 404 NotFound\r\n\r\n\r\nNot Found ${bash_rest_incoming_request_http_method_and_endpoint}";; esac '
+	local controller_switch_end='*) bash_rest_404_response="HTTP/1.1 404 NotFound\r\n\r\n\r\nNot Found";; esac '
 
 	for i in "${!endpoint_function_map[@]}"; do
 		controller_switch_statement+="\"$(strip_path_variable_names "${i}")\") bash_rest_response=\"\$(${endpoint_function_map[${i}]} \"\${bash_rest_endpoint_path_variables_array[@]}\")\";; "
@@ -172,6 +172,7 @@ build_endpoint_handler_function() {
 				  local bash_rest_incoming_request_http_method_and_endpoint="\${1}"
 				  local -a bash_rest_endpoint_path_variables_array
 				  local bash_rest_response
+				  local bash_rest_404_response
 					
 					local bash_rest_incoming_request_http_method=\$(cut -d " " -f 1 <<< \${bash_rest_incoming_request_http_method_and_endpoint})
 					local bash_rest_incoming_request_uri=\$(cut -d " " -f 2 <<< \${bash_rest_incoming_request_http_method_and_endpoint})
@@ -183,12 +184,12 @@ build_endpoint_handler_function() {
 				  ${controller_switch_statement}
 	        ${controller_switch_end}
 
-	        if [[ -n \${bash_rest_response} ]]; then
+	        if [[ -z \${bash_rest_404_response} ]]; then
 						bash_rest_print_log "INFO" "HTTP call to \${bash_rest_incoming_request_http_method_and_endpoint}"
 	          echo -e \$bash_rest_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
 	        else
 	        	bash_rest_print_log "ERROR" "Endpoint mapping does not exist for \${bash_rest_incoming_request_http_method_and_endpoint}"
-	          echo -e \$bash_rest_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
+	          echo -e \$bash_rest_404_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
 	        fi
 				}
 DECLARE_BASH_REST_ENDPOINT_HANDLER_FUNCTION
