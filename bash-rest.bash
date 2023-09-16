@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
 
-# NOTE: netcat only does http, so modularise webserver command functionality,
-# that way a https compatible command can be swapped out (like openssl, apparently)
-# https://superhero.ninja/2015/07/22/create-a-simple-https-server-with-openssl-s_server/
-
 # shellcheck disable=2034,2162,2155,2207
+
+# source scripts with functions annotated with request_mapping annotations here
+# source "..."
 
 declare -gx BASH_REST_PROJECT_BASE_DIRECTORY="$(cd -P -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 declare -i BASH_REST_PORT=3000
@@ -19,7 +18,7 @@ bash_rest_print_log() {
 
 	if [[ "${log_level}" == "INFO" ]]; then
 		log_level="[${log_level}]      "
-	elif [[ "${log_level}" == "ERROR" ]] || [[ "${log_level}" == "FATAL" ]]; then
+	elif [[ "${log_level}" == "ERROR" ]] || [[ "${log_level}" == "FATAL" ]] || [[ "${log_level}" == "DEBUG" ]]; then
 		log_level="[${log_level}]     "
 	fi
 
@@ -90,7 +89,7 @@ get_request_path_variables() {
 
 get_controller_annotations() {
 	local -n controller_annotations_array="${1}"
-	mapfile -t controller_annotations_array < <(declare -F | cut -d " " -f 3 | grep -oP "^@[a-zA-Z:./_-]+_[0-9]+$")
+	mapfile -t controller_annotations_array < <(declare -F | cut -d " " -f 3 | grep -oP "^@(?:get|post|put|delete)[a-zA-Z:./_-]+_[0-9]+$")
 }
 
 strip_path_variable_names() {
@@ -169,7 +168,7 @@ build_endpoint_handler_function() {
 	        ${controller_switch_end}
 
 	        if [[ -n \${bash_rest_response_body} ]]; then
-						bash_rest_http_response="HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n{ \"response\": \"\${bash_rest_response_body}\" }"
+						bash_rest_http_response="HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n\r\n\${bash_rest_response_body}"
 						bash_rest_print_log "INFO" "HTTP call to \${bash_rest_incoming_request_http_method_and_endpoint}"
 	          echo -e \$bash_rest_http_response >"${BASH_REST_RESPONSE_FIFO_PATH}"
 	        else
@@ -198,6 +197,7 @@ bash_rest_handle_request() {
 			bash_rest_incoming_request=$(echo "${trline}" | sed -E "s/$headline_regex/\1 \2/")
 	done
 
+	# Defined at runtime in build_endpoint_handler_function
 	bash_rest_endpoint_handler "${bash_rest_incoming_request}"
 }
 
@@ -260,6 +260,8 @@ bash_rest_print_located_annotations() {
 }
 
 bash_rest_main() {
+	trap fifo_cleanup EXIT
+
 	print_bash_rest_init
 	fifo_setup
 
@@ -277,8 +279,6 @@ bash_rest_main() {
 		# shellcheck disable=SC2002
 		cat "${BASH_REST_RESPONSE_FIFO_PATH}" | nc -lN "${BASH_REST_PORT}" | bash_rest_handle_request
 	done
-
-	fifo_cleanup
 }
 
 bash_rest_main
