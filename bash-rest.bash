@@ -8,6 +8,13 @@ declare BASH_REST_RESPONSE_FIFO="bash_rest_response"
 declare BASH_REST_RESPONSE_FIFO_PATH="${BASH_REST_PROJECT_BASE_DIRECTORY}/fifo/${BASH_REST_RESPONSE_FIFO}"
 declare -a BASH_REST_MAPPED_ENDPOINTS
 
+bash_rest_404_not_found() {
+	cat <<EOF
+	HTTP/1.1 404 NotFound
+
+EOF
+}
+
 bash_rest_print_log() {
 	local log_level="${1}"
 	local log_message="${2}"
@@ -44,6 +51,14 @@ get_annotation_source_file() {
 	local annotation="${1}"
 	declare -f "${annotation}" | grep -oP "(?<=local bash_rest_function_source_file=)(?<=\")?(?<=\')?[a-zA-Z:./_-]+"
 
+}
+
+get_annotation_http_method() {
+	local annotation="${1}"
+
+	annotation="${annotation%%_*}"
+	annotation="${annotation#*@}"
+	echo "${annotation^^}"
 }
 
 get_request_path_variables() {
@@ -148,10 +163,10 @@ parse_controller_annotations() {
 		endpoint=$(get_annotation_endpoint "${annotation}")
 		# get function associated with endpoint
 		target_function=$(get_annotation_target_function "${annotation}")
-		http_method="${annotation%%_*}"
-		http_method="${http_method#*@}"
-		populate_bash_rest_mapped_endpoints_array "${endpoint}"
-		controller_endpoint_functions_map+=(["${http_method^^} ${endpoint}"]="${target_function}")
+		http_method="$(get_annotation_http_method "${annotation}")"
+		unique_mapping_identifier="${http_method} ${endpoint}"
+		populate_bash_rest_mapped_endpoints_array "${unique_mapping_identifier}"
+		controller_endpoint_functions_map+=(["${unique_mapping_identifier}"]="${target_function}")
 	done
 }
 
@@ -160,7 +175,7 @@ build_endpoint_handler_function() {
 	local controller_switch_start="case \"\${bash_rest_endpoint_match}\" in "
 	local controller_switch_statement=""
 	# shellcheck disable=2016
-	local controller_switch_end='*) bash_rest_404_response="HTTP/1.1 404 NotFound\r\n\r\n\r\nNot Found";; esac '
+	local controller_switch_end="*) bash_rest_404_response=\"\$(bash_rest_404_not_found)\";; esac "
 
 	for i in "${!endpoint_function_map[@]}"; do
 		controller_switch_statement+="\"$(strip_path_variable_names "${i}")\") bash_rest_response=\"\$(${endpoint_function_map[${i}]} \"\${bash_rest_endpoint_path_variables_array[@]}\")\";; "
@@ -174,9 +189,8 @@ build_endpoint_handler_function() {
 				  local bash_rest_response
 				  local bash_rest_404_response
 					
-					local bash_rest_incoming_request_http_method=\$(cut -d " " -f 1 <<< \${bash_rest_incoming_request_http_method_and_endpoint})
+					local bash_rest_endpoint_match=\$(get_endpoint_match "\${bash_rest_incoming_request_http_method_and_endpoint}")
 					local bash_rest_incoming_request_uri=\$(cut -d " " -f 2 <<< \${bash_rest_incoming_request_http_method_and_endpoint})
-					local bash_rest_endpoint_match=\$(echo \${bash_rest_incoming_request_http_method} \$(get_endpoint_match \${bash_rest_incoming_request_uri}))
 					
 					get_request_path_variables "\${bash_rest_endpoint_match}" "\${bash_rest_incoming_request_uri}" bash_rest_endpoint_path_variables_array
 
@@ -186,10 +200,10 @@ build_endpoint_handler_function() {
 
 	        if [[ -z \${bash_rest_404_response} ]]; then
 						bash_rest_print_log "INFO" "HTTP call to \${bash_rest_incoming_request_http_method_and_endpoint}"
-	          echo -e "\$bash_rest_response" >"${BASH_REST_RESPONSE_FIFO_PATH}"
+	          echo -e "\$bash_rest_response" > "${BASH_REST_RESPONSE_FIFO_PATH}"
 	        else
 	        	bash_rest_print_log "ERROR" "Endpoint mapping does not exist for \${bash_rest_incoming_request_http_method_and_endpoint}"
-	          echo -e "\$bash_rest_404_response" >"${BASH_REST_RESPONSE_FIFO_PATH}"
+	          echo -e "\$bash_rest_404_response" > "${BASH_REST_RESPONSE_FIFO_PATH}"
 	        fi
 				}
 DECLARE_BASH_REST_ENDPOINT_HANDLER_FUNCTION
@@ -254,13 +268,14 @@ EOF
 bash_rest_print_located_annotations() {
 	local -n http_method_mapping_annotations_array="${1}"
 	local endpoint
-	local -a endpoints
+	local -a endpoints_mapping
 	local -a duplicate_endpoint_declarations
 
 	for annotation in "${http_method_mapping_annotations_array[@]}"; do
 		# get endpoint mapping
+		http_method="$(get_annotation_http_method "${annotation}")"
 		endpoint=$(get_annotation_endpoint "${annotation}")
-		endpoints+=("${endpoint}")
+		endpoints_mapping+=("${http_method} ${endpoint}")
 		# get function associated with endpoint
 		target_function=$(get_annotation_target_function "${annotation}")
 		annotation_source_file=$(get_annotation_source_file "${annotation}")
@@ -268,11 +283,11 @@ bash_rest_print_located_annotations() {
 		bash_rest_print_log "INFO" "Mapping ${annotation_source_file##*/}::${annotation}: ${endpoint} to ${target_function}()"
 	done
 
-	mapfile -t duplicate_endpoint_declarations < <(printf '%s\n' "${endpoints[@]}" | sort | uniq -d)
+	mapfile -t duplicate_endpoint_mapping_declarations < <(printf '%s\n' "${endpoints_mapping[@]}" | sort | uniq -d)
 
-	if [[ ${#duplicate_endpoint_declarations[@]} -ne 0 ]]; then
-		for duplicate_endpoint_declaration in "${duplicate_endpoint_declarations[@]}"; do
-			bash_rest_print_log "FATAL" "Duplicate endpoint declaration: ${duplicate_endpoint_declaration}"
+	if [[ ${#duplicate_endpoint_mapping_declarations[@]} -ne 0 ]]; then
+		for duplicate_endpoint_mapping_declaration in "${duplicate_endpoint_mapping_declarations[@]}"; do
+			bash_rest_print_log "FATAL" "Duplicate endpoint declaration: ${duplicate_endpoint_mapping_declaration}"
 		done
 		bash_rest_print_log "FATAL" "Exiting script..."
 		exit 1
@@ -293,12 +308,13 @@ bash_rest_main() {
 	parse_controller_annotations method_endpoint_function_map "${annotations_array[@]}"
 	build_endpoint_handler_function method_endpoint_function_map
 
-	# Disable bash-annotations runtime checks - all annotations should be built, injected, and scanned for by now
-	shopt -u extdebug
+	# Disable bash-annotations runtime checks by unsetting DEBUG trap.
+	# All annotations should be built, injected, and scanned for by now
+	trap - DEBUG
 
 	while true; do
 		# shellcheck disable=SC2002
-		cat "${BASH_REST_RESPONSE_FIFO_PATH}" | nc -lN "${BASH_REST_PORT}" | bash_rest_handle_request
+		cat "${BASH_REST_RESPONSE_FIFO_PATH}" | nc -lN -p "${BASH_REST_PORT}" | bash_rest_handle_request
 	done
 }
 

@@ -20,8 +20,6 @@ are invoked when their respective endpoints are called.
 At present, only path variables are parsed (e.g. request body and request parameters are not captured, and the presence of characters 
 like '?' in a path variable interfere with parsing due to reliance on regex and lookarounds).
 
-Responses are hardcoded to `"Content-Type: application/json"`.
-
 Default port is 3000.
 
 ## Usage
@@ -42,8 +40,11 @@ get_dashboard() {
     local user_id="${1}" 
     local profile_id="${2}"
 
-# Create valid json response
+# Configure valid http and json response
     cat <<EOF
+HTTP/1.1 200
+Content-Type: application/json
+
 {
     "userId": "${user_id}",
     "profileId": "${profile_id}"
@@ -65,6 +66,26 @@ curl -X GET "http://localhost:3000/api/v1/5499/dashboard/1"
 
 ```
 
+### Overriding default behaviour
+
+`bash-rest` defines `bash_rest_404_not_found()` as a default function to handle instances when a requested endpoint cannot be found.
+
+This can be overridden by simply defining your own implementation of `bash_rest_404_not_found()` in a file sourced by `bash-rest.bash`.
+
+Template for custom implementation is:
+
+```bash
+bash_rest_404_not_found() {
+	cat <<EOF
+HTTP/1.1 404 NotFound
+Content-Type: # e.g. text/html
+
+# Desired 404 response here
+EOF
+}
+
+```
+
 ## Credits
 
-Basic `netcat` implementation with named pipes is taken from https://dev.to/leandronsp/building-a-web-server-in-bash-part-i-sockets-2n8b
+Request parsing and `netcat` implementation with named pipes is taken from https://dev.to/leandronsp/building-a-web-server-in-bash-part-i-sockets-2n8b
